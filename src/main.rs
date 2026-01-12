@@ -1,3 +1,4 @@
+pub mod stock_api;
 pub mod stock_manager;
 pub mod stock_object;
 
@@ -9,7 +10,8 @@ use gtk::{
 };
 use std::{rc::Rc, time::Duration};
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let application = gtk::Application::builder()
         .application_id("org.stockfin")
         .build();
@@ -51,12 +53,12 @@ fn on_startup(app: &gtk::Application) {
 }
 
 fn on_activate(application: &gtk::Application) {
-    let stock_manager = Rc::new(StockManager::new(&["AAPL", "TEST"]));
+    let stock_manager = Rc::new(StockManager::new(&["GOOGL", "LUG.ST", "EQIX", "AAPL"]));
 
-    // Update prices
+    // Update prices once every 10 seconds
     let manager_clone = stock_manager.clone();
-    timeout_add_local(Duration::from_secs(1), move || {
-        manager_clone.update_prices();
+    timeout_add_local(Duration::from_secs(10), move || {
+        manager_clone.update_stocks();
 
         // Continue = keep timer running
         ControlFlow::Continue

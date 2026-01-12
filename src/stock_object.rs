@@ -9,9 +9,13 @@ mod imp {
     #[properties(wrapper_type = super::StockObject)]
     pub struct StockObject {
         #[property(get, set)]
+        pub name: RefCell<String>,
+        #[property(get, set)]
         pub ticker: RefCell<String>,
         #[property(get, set)]
         pub price: RefCell<f64>,
+        #[property(get, set)]
+        pub pct_change_1w: RefCell<f64>,
     }
 
     #[glib::object_subclass]
@@ -29,10 +33,12 @@ glib::wrapper! {
 }
 
 impl StockObject {
-    pub fn new(ticker: &str, price: f64) -> Self {
+    pub fn new(ticker: &str) -> Self {
         glib::Object::builder()
             .property("ticker", ticker)
-            .property("price", price)
+            .property("name", "?")
+            .property("price", 0.0)
+            .property("pct_change_1w", 0.0)
             .build()
     }
 }
