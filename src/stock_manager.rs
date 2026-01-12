@@ -69,7 +69,7 @@ impl StockManager {
         let factory_ticker = SignalListItemFactory::new();
         factory_ticker.connect_setup(|_, list_item| {
             let label = Label::new(None);
-            label.set_halign(gtk::Align::Start);
+            label.set_halign(Align::Start);
             list_item.set_child(Some(&label));
         });
         factory_ticker.connect_bind(|_, list_item| {
@@ -101,10 +101,10 @@ impl StockManager {
         column_view.append_column(&col_name);
 
         // --- Column 3: Price ---
-        let factory_price = gtk::SignalListItemFactory::new();
+        let factory_price = SignalListItemFactory::new();
         factory_price.connect_setup(|_, list_item| {
             let label = Label::new(None);
-            label.set_halign(gtk::Align::End);
+            label.set_halign(Align::End);
             list_item.set_child(Some(&label));
         });
         factory_price.connect_bind(|_, list_item| {
