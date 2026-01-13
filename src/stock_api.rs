@@ -44,4 +44,15 @@ impl StockApi {
             Err(e) => Err(anyhow!("Error fetching {}: {}", ticker, e)),
         }
     }
+
+    pub async fn search_ticker(&self, query: &str) -> Vec<(String, String)> {
+        match self.provider.search_ticker(query).await {
+            Ok(resp) => resp
+                .quotes
+                .iter()
+                .map(|i| (i.symbol.clone(), i.short_name.clone()))
+                .collect(),
+            Err(_) => vec![],
+        }
+    }
 }

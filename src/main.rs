@@ -25,7 +25,7 @@ async fn main() {
     application.run();
 }
 
-fn on_startup(app: &Application) {
+fn on_startup(_app: &Application) {
     let css_provider = CssProvider::new();
     css_provider.load_from_path("resources/style.css");
 
@@ -34,40 +34,32 @@ fn on_startup(app: &Application) {
         &css_provider,
         STYLE_PROVIDER_PRIORITY_APPLICATION,
     );
-
-    let about = ActionEntry::builder("about")
-        .activate(|_, _, _| println!("About was pressed"))
-        .build();
-
-    let quit = ActionEntry::builder("quit")
-        .activate(|app: &gtk::Application, _, _| app.quit())
-        .build();
-
-    app.add_action_entries([about, quit]);
-
-    let menubar = {
-        let file_menu = {
-            let about_menu_item = MenuItem::new(Some("About"), Some("app.about"));
-            let quit_menu_item = MenuItem::new(Some("Quit"), Some("app.quit"));
-
-            let file_menu = gio::Menu::new();
-            file_menu.append_item(&about_menu_item);
-            file_menu.append_item(&quit_menu_item);
-            file_menu
-        };
-
-        let menubar = gio::Menu::new();
-        menubar.append_submenu(Some("File"), &file_menu);
-
-        menubar
-    };
-
-    app.set_menubar(Some(&menubar));
 }
 
 fn on_activate(application: &Application) {
     let tickers = load_tickers();
     let stock_manager = Rc::new(StockManager::new(&tickers));
+
+    let main_layout = gtk::Box::builder()
+        .orientation(gtk::Orientation::Vertical)
+        .spacing(20)
+        .build();
+
+    let stock_list = stock_manager.create_stock_list();
+    stock_list.set_vexpand(true);
+    main_layout.append(&stock_manager.create_search_bar());
+    main_layout.append(&stock_list);
+
+    let window = gtk::ApplicationWindow::builder()
+        .application(application)
+        .title("Stockfin")
+        .default_width(400)
+        .default_height(400)
+        .child(&main_layout)
+        .show_menubar(true)
+        .build();
+
+    window.present();
 
     // Update prices once every 10 seconds
     let manager_clone = stock_manager.clone();
@@ -77,15 +69,4 @@ fn on_activate(application: &Application) {
         // Continue = keep timer running
         ControlFlow::Continue
     });
-
-    let window = gtk::ApplicationWindow::builder()
-        .application(application)
-        .title("Stockfin")
-        .default_width(400)
-        .default_height(400)
-        .child(&stock_manager.create_stock_list())
-        .show_menubar(true)
-        .build();
-
-    window.present();
 }

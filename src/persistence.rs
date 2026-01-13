@@ -2,8 +2,9 @@ use directories::ProjectDirs;
 use std::fs;
 
 pub fn get_config_path() -> std::path::PathBuf {
-    let proj_dirs =
-        ProjectDirs::from("org", "stockfin", "app").expect("Could not determine config directory");
+    let proj_dirs = ProjectDirs::from("com", "yourname", "stockfin")
+        .expect("Could not determine config directory");
+
     let config_dir = proj_dirs.config_dir();
     fs::create_dir_all(config_dir).ok();
     config_dir.join("tickers.json")

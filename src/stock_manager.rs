@@ -6,16 +6,13 @@ use crate::{
 use gtk::{
     Align, ColumnView, ColumnViewColumn, GestureClick, INVALID_LIST_POSITION, Label, PopoverMenu,
     PopoverMenuFlags, ScrolledWindow, SignalListItemFactory, SingleSelection,
-    gio::{
-        ListStore, Menu, SimpleAction, SimpleActionGroup,
-        prelude::{ActionMapExt, ListModelExt},
-    },
+    gio::{ListStore, Menu, SimpleAction, SimpleActionGroup, prelude::*},
     glib::{
         self,
         object::{Cast, CastNone, ObjectExt},
     },
     pango::EllipsizeMode,
-    prelude::{GestureSingleExt, ListItemExt, PopoverExt, WidgetExt},
+    prelude::*,
 };
 use std::rc::Rc;
 
@@ -217,5 +214,117 @@ impl StockManager {
         column_view.append_column(&col_change);
 
         ScrolledWindow::builder().child(&column_view).build()
+    }
+
+    pub fn create_search_bar(&self) -> gtk::Box {
+        let container = gtk::Box::new(gtk::Orientation::Vertical, 6);
+        let search_entry = gtk::SearchEntry::builder()
+            .placeholder_text("Search ticker and press Enter...")
+            .margin_top(12)
+            .margin_start(12)
+            .margin_end(12)
+            .build();
+
+        let results_popover = gtk::Popover::builder()
+            .autohide(true)
+            .position(gtk::PositionType::Bottom)
+            .build();
+        results_popover.set_parent(&search_entry);
+
+        let results_list = gtk::ListBox::new();
+        results_popover.set_child(Some(&results_list));
+
+        // --- TRIGGER SEARCH ONLY ON ENTER ---
+        search_entry.connect_activate(glib::clone!(
+            #[weak(rename_to = api)]
+            self.api,
+            #[weak]
+            results_popover,
+            #[weak]
+            results_list,
+            move |entry| {
+                let text = entry.text().to_string();
+                if text.is_empty() {
+                    return;
+                }
+
+                glib::MainContext::default().spawn_local(glib::clone!(
+                    #[weak]
+                    api,
+                    #[weak]
+                    results_popover,
+                    #[weak]
+                    results_list,
+                    async move {
+                        let results = api.search_ticker(&text).await;
+
+                        // Clear old results
+                        while let Some(child) = results_list.first_child() {
+                            results_list.remove(&child);
+                        }
+
+                        if results.is_empty() {
+                            results_popover.popdown();
+                            return;
+                        }
+
+                        for (symbol, name) in results {
+                            let label = Label::builder()
+                                .label(format!("<b>{}</b> - {}", symbol, name))
+                                .use_markup(true)
+                                .xalign(0.0)
+                                .margin_end(8)
+                                .build();
+
+                            let row = gtk::ListBoxRow::new();
+                            row.set_child(Some(&label));
+
+                            // Attach the symbol directly to the widget memory
+                            unsafe {
+                                row.set_data("ticker_symbol", symbol);
+                            }
+
+                            results_list.append(&row);
+                        }
+                        results_popover.popup();
+                    }
+                ));
+            }
+        ));
+
+        // --- SELECTION LOGIC (NO PARSING) ---
+        results_list.connect_row_activated(glib::clone!(
+            #[weak(rename_to = model)]
+            self.model,
+            #[weak]
+            results_popover,
+            #[weak]
+            search_entry,
+            move |_, row| {
+                // Retrieve the symbol safely from the data we attached
+                let symbol: String = unsafe {
+                    row.data::<String>("ticker_symbol")
+                        .map(|s| s.as_ref().clone())
+                        .unwrap_or_default()
+                };
+
+                if !symbol.is_empty() {
+                    model.append(&StockObject::new(&symbol));
+
+                    // Save state
+                    let tickers: Vec<String> = (0..model.n_items())
+                        .filter_map(|i| model.item(i))
+                        .map(|obj| obj.downcast::<StockObject>().unwrap().ticker())
+                        .collect();
+                    save_tickers(tickers);
+                }
+
+                search_entry.set_text("");
+                results_popover.popdown();
+            }
+        ));
+
+        container.append(&search_entry);
+        container
     }
 }
