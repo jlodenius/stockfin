@@ -36,7 +36,7 @@ impl StockObject {
     pub fn new(ticker: &str) -> Self {
         glib::Object::builder()
             .property("ticker", ticker)
-            .property("name", "?")
+            .property("name", "N/A")
             .property("price", 0.0)
             .property("pct_change_1w", 0.0)
             .build()
