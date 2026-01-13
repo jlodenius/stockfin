@@ -5,9 +5,9 @@ pub mod stock_object;
 
 use crate::{persistence::load_tickers, stock_manager::StockManager};
 use gtk::{
-    Application, CssProvider, STYLE_PROVIDER_PRIORITY_APPLICATION,
+    Application, ApplicationWindow, Box, CssProvider, Orientation,
+    STYLE_PROVIDER_PRIORITY_APPLICATION,
     gdk::Display,
-    gio::{self, ActionEntry, MenuItem},
     glib::{ControlFlow, timeout_add_local},
     prelude::*,
     style_context_add_provider_for_display,
@@ -16,7 +16,7 @@ use std::{rc::Rc, time::Duration};
 
 #[tokio::main]
 async fn main() {
-    let application = gtk::Application::builder()
+    let application = Application::builder()
         .application_id("org.stockfin")
         .build();
 
@@ -40,9 +40,9 @@ fn on_activate(application: &Application) {
     let tickers = load_tickers();
     let stock_manager = Rc::new(StockManager::new(&tickers));
 
-    let main_layout = gtk::Box::builder()
-        .orientation(gtk::Orientation::Vertical)
-        .spacing(20)
+    let main_layout = Box::builder()
+        .orientation(Orientation::Vertical)
+        .spacing(12)
         .build();
 
     let stock_list = stock_manager.create_stock_list();
@@ -50,7 +50,7 @@ fn on_activate(application: &Application) {
     main_layout.append(&stock_manager.create_search_bar());
     main_layout.append(&stock_list);
 
-    let window = gtk::ApplicationWindow::builder()
+    let window = ApplicationWindow::builder()
         .application(application)
         .title("Stockfin")
         .default_width(400)

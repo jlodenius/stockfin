@@ -4,8 +4,10 @@ use crate::{
     stock_object::StockObject,
 };
 use gtk::{
-    Align, ColumnView, ColumnViewColumn, GestureClick, INVALID_LIST_POSITION, Label, PopoverMenu,
-    PopoverMenuFlags, ScrolledWindow, SignalListItemFactory, SingleSelection,
+    Align, Box, ColumnView, ColumnViewColumn, GestureClick, INVALID_LIST_POSITION, Label, ListBox,
+    ListBoxRow, Orientation, Popover, PopoverMenu, PopoverMenuFlags, PositionType, ScrolledWindow,
+    SearchEntry, SignalListItemFactory, SingleSelection,
+    gdk::Rectangle,
     gio::{ListStore, Menu, SimpleAction, SimpleActionGroup, prelude::*},
     glib::{
         self,
@@ -111,7 +113,7 @@ impl StockManager {
             #[weak]
             popover,
             move |_, _, x, y| {
-                popover.set_pointing_to(Some(&gtk::gdk::Rectangle::new(x as i32, y as i32, 0, 0)));
+                popover.set_pointing_to(Some(&Rectangle::new(x as i32, y as i32, 0, 0)));
                 popover.popup();
             }
         ));
@@ -216,25 +218,25 @@ impl StockManager {
         ScrolledWindow::builder().child(&column_view).build()
     }
 
-    pub fn create_search_bar(&self) -> gtk::Box {
-        let container = gtk::Box::new(gtk::Orientation::Vertical, 6);
-        let search_entry = gtk::SearchEntry::builder()
+    pub fn create_search_bar(&self) -> Box {
+        let container = Box::new(Orientation::Vertical, 6);
+        let search_entry = SearchEntry::builder()
             .placeholder_text("Search ticker and press Enter...")
             .margin_top(12)
             .margin_start(12)
             .margin_end(12)
             .build();
 
-        let results_popover = gtk::Popover::builder()
+        let results_popover = Popover::builder()
             .autohide(true)
-            .position(gtk::PositionType::Bottom)
+            .position(PositionType::Bottom)
             .build();
         results_popover.set_parent(&search_entry);
 
-        let results_list = gtk::ListBox::new();
+        let results_list = ListBox::new();
         results_popover.set_child(Some(&results_list));
 
-        // --- TRIGGER SEARCH ONLY ON ENTER ---
+        // --- TRIGGER SEARCH ON ENTER ---
         search_entry.connect_activate(glib::clone!(
             #[weak(rename_to = api)]
             self.api,
@@ -273,13 +275,11 @@ impl StockManager {
                                 .label(format!("<b>{}</b> - {}", symbol, name))
                                 .use_markup(true)
                                 .xalign(0.0)
-                                .margin_end(8)
                                 .build();
 
-                            let row = gtk::ListBoxRow::new();
+                            let row = ListBoxRow::new();
                             row.set_child(Some(&label));
 
-                            // Attach the symbol directly to the widget memory
                             unsafe {
                                 row.set_data("ticker_symbol", symbol);
                             }
@@ -292,7 +292,7 @@ impl StockManager {
             }
         ));
 
-        // --- SELECTION LOGIC (NO PARSING) ---
+        // --- SELECTION LOGIC ---
         results_list.connect_row_activated(glib::clone!(
             #[weak(rename_to = model)]
             self.model,
@@ -301,7 +301,6 @@ impl StockManager {
             #[weak]
             search_entry,
             move |_, row| {
-                // Retrieve the symbol safely from the data we attached
                 let symbol: String = unsafe {
                     row.data::<String>("ticker_symbol")
                         .map(|s| s.as_ref().clone())
@@ -311,11 +310,11 @@ impl StockManager {
                 if !symbol.is_empty() {
                     model.append(&StockObject::new(&symbol));
 
-                    // Save state
                     let tickers: Vec<String> = (0..model.n_items())
                         .filter_map(|i| model.item(i))
                         .map(|obj| obj.downcast::<StockObject>().unwrap().ticker())
                         .collect();
+
                     save_tickers(tickers);
                 }
 

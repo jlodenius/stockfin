@@ -1,12 +1,13 @@
 # Development MVP
-- [] List of stocks with some data
-- [] Persisted state (add/remove stocks from list + keep their current state)
+- [x] List of stocks with some data
+- [x] Persisted state (add/remove stocks from list + keep their current state)
 - [] Waybar widget
+- [] Display total profit
+- [] Include/Exclude stock from total
 
 # Features
 - [] Weighted stocks/portfolio
 - [] Desktop alerts
-- [] Add crypto
 - [] Track Nasdaq/OMX etc
 
 # Packaging
