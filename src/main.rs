@@ -1,8 +1,9 @@
+pub mod persistence;
 pub mod stock_api;
 pub mod stock_manager;
 pub mod stock_object;
 
-use crate::stock_manager::StockManager;
+use crate::{persistence::load_tickers, stock_manager::StockManager};
 use gtk::{
     Application, CssProvider, STYLE_PROVIDER_PRIORITY_APPLICATION,
     gdk::Display,
@@ -65,7 +66,8 @@ fn on_startup(app: &Application) {
 }
 
 fn on_activate(application: &Application) {
-    let stock_manager = Rc::new(StockManager::new(&["GOOGL", "LUG.ST", "EQIX", "AAPL"]));
+    let tickers = load_tickers();
+    let stock_manager = Rc::new(StockManager::new(&tickers));
 
     // Update prices once every 10 seconds
     let manager_clone = stock_manager.clone();

@@ -7,6 +7,9 @@ edition = "2024"
 yahoo_finance_api = "4.1.0"
 tokio = { version = "1", features = ["full"] }
 anyhow = "1.0.100"
+serde = "1.0.228"
+serde_json = "1.0.149"
+directories = "6.0.0"
 
 [dependencies.gtk]
 package = "gtk4"

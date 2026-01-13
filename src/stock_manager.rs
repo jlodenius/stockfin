@@ -1,4 +1,5 @@
 use crate::{
+    persistence::save_tickers,
     stock_api::{StockApi, WeeklyRangeResponse},
     stock_object::StockObject,
 };
@@ -24,7 +25,7 @@ pub struct StockManager {
 }
 
 impl StockManager {
-    pub fn new(tickers: &[&'static str]) -> Self {
+    pub fn new(tickers: &[String]) -> Self {
         let api = Rc::new(StockApi::new());
         let model = ListStore::new::<StockObject>();
 
@@ -86,6 +87,13 @@ impl StockManager {
                 let pos = selection.selected();
                 if pos != INVALID_LIST_POSITION {
                     model.remove(pos);
+
+                    // Persist changes
+                    let tickers: Vec<String> = (0..model.n_items())
+                        .filter_map(|i| model.item(i))
+                        .map(|obj| obj.downcast::<StockObject>().unwrap().ticker())
+                        .collect();
+                    save_tickers(tickers);
                 }
             }
         ));
