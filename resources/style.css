@@ -1,0 +1,15 @@
+.success {
+  color: #26a269;
+  font-weight: bold;
+}
+
+.error {
+  color: #c01c28;
+  font-weight: bold;
+}
+
+popover.menu box {
+  padding-top: 4px;
+  padding-bottom: 4px;
+  margin-bottom: 0;
+}

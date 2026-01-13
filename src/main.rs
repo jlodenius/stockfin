@@ -4,9 +4,12 @@ pub mod stock_object;
 
 use crate::stock_manager::StockManager;
 use gtk::{
+    Application, CssProvider, STYLE_PROVIDER_PRIORITY_APPLICATION,
+    gdk::Display,
     gio::{self, ActionEntry, MenuItem},
     glib::{ControlFlow, timeout_add_local},
     prelude::*,
+    style_context_add_provider_for_display,
 };
 use std::{rc::Rc, time::Duration};
 
@@ -21,7 +24,16 @@ async fn main() {
     application.run();
 }
 
-fn on_startup(app: &gtk::Application) {
+fn on_startup(app: &Application) {
+    let css_provider = CssProvider::new();
+    css_provider.load_from_path("resources/style.css");
+
+    style_context_add_provider_for_display(
+        &Display::default().expect("Could not connect to a display."),
+        &css_provider,
+        STYLE_PROVIDER_PRIORITY_APPLICATION,
+    );
+
     let about = ActionEntry::builder("about")
         .activate(|_, _, _| println!("About was pressed"))
         .build();
@@ -52,7 +64,7 @@ fn on_startup(app: &gtk::Application) {
     app.set_menubar(Some(&menubar));
 }
 
-fn on_activate(application: &gtk::Application) {
+fn on_activate(application: &Application) {
     let stock_manager = Rc::new(StockManager::new(&["GOOGL", "LUG.ST", "EQIX", "AAPL"]));
 
     // Update prices once every 10 seconds

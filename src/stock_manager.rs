@@ -3,21 +3,24 @@ use crate::{
     stock_object::StockObject,
 };
 use gtk::{
-    Align, ColumnView, ColumnViewColumn, Label, ScrolledWindow, SignalListItemFactory,
-    SingleSelection,
-    gio::{ListStore, prelude::ListModelExt},
+    Align, ColumnView, ColumnViewColumn, GestureClick, INVALID_LIST_POSITION, Label, PopoverMenu,
+    PopoverMenuFlags, ScrolledWindow, SignalListItemFactory, SingleSelection,
+    gio::{
+        ListStore, Menu, SimpleAction, SimpleActionGroup,
+        prelude::{ActionMapExt, ListModelExt},
+    },
     glib::{
         self,
         object::{Cast, CastNone, ObjectExt},
     },
     pango::EllipsizeMode,
-    prelude::{ListItemExt, WidgetExt},
+    prelude::{GestureSingleExt, ListItemExt, PopoverExt, WidgetExt},
 };
 use std::rc::Rc;
 
 pub struct StockManager {
     api: Rc<StockApi>,
-    pub model: ListStore,
+    model: ListStore,
 }
 
 impl StockManager {
@@ -64,6 +67,50 @@ impl StockManager {
     pub fn create_stock_list(&self) -> ScrolledWindow {
         let selection_model = SingleSelection::new(Some(self.model.clone()));
         let column_view = ColumnView::new(Some(selection_model));
+        column_view.set_reorderable(false);
+
+        // --- Action Setup ---
+        let action_group = SimpleActionGroup::new();
+        let remove_stock_action = SimpleAction::new("remove", None);
+
+        remove_stock_action.connect_activate(glib::clone!(
+            #[weak(rename_to = model)]
+            self.model,
+            #[weak]
+            column_view,
+            move |_, _| {
+                let selection = column_view
+                    .model()
+                    .and_downcast::<SingleSelection>()
+                    .unwrap();
+                let pos = selection.selected();
+                if pos != INVALID_LIST_POSITION {
+                    model.remove(pos);
+                }
+            }
+        ));
+        action_group.add_action(&remove_stock_action);
+        column_view.insert_action_group("stock", Some(&action_group));
+
+        // --- Menu UI Setup ---
+        let menu_model = Menu::new();
+        menu_model.append(Some("Remove"), Some("stock.remove"));
+        let popover = PopoverMenu::from_model_full(&menu_model, PopoverMenuFlags::NESTED);
+        popover.set_parent(&column_view);
+        popover.set_has_arrow(false);
+
+        // --- Right Click Gesture ---
+        let gesture = GestureClick::new();
+        gesture.set_button(3);
+        gesture.connect_pressed(glib::clone!(
+            #[weak]
+            popover,
+            move |_, _, x, y| {
+                popover.set_pointing_to(Some(&gtk::gdk::Rectangle::new(x as i32, y as i32, 0, 0)));
+                popover.popup();
+            }
+        ));
+        column_view.add_controller(gesture);
 
         // --- Column 1: Ticker ---
         let factory_ticker = SignalListItemFactory::new();
@@ -146,8 +193,8 @@ impl StockManager {
                     #[weak]
                     label,
                     move |s, _| {
-                        let change = s.property::<f64>("pct-change-1w");
-                        if change >= 0.0 {
+                        let pct_change = s.property::<f64>("pct-change-1w");
+                        if pct_change >= 0.0 {
                             label.add_css_class("success");
                             label.remove_css_class("error");
                         } else {
@@ -158,7 +205,7 @@ impl StockManager {
                 ),
             );
         });
-        let col_change = ColumnViewColumn::new(Some("1W Change"), Some(factory_change));
+        let col_change = ColumnViewColumn::new(Some("Change (1w)"), Some(factory_change));
         column_view.append_column(&col_change);
 
         ScrolledWindow::builder().child(&column_view).build()
