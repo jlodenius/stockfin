@@ -96,9 +96,7 @@ impl StockfinBus {
                 .expect("Failed to serve object");
 
             // This thread now just sits and waits for DBus requests
-            loop {
-                thread::park();
-            }
+            thread::park();
         });
 
         state
