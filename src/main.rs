@@ -15,8 +15,7 @@ use gtk::{
 };
 use std::{rc::Rc, time::Duration};
 
-#[tokio::main]
-async fn main() {
+fn main() {
     let application = Application::builder()
         .application_id("org.jlodenius.stockfin")
         .build();
