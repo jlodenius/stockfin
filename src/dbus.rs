@@ -67,7 +67,7 @@ impl StockfinBus {
             "text": format!("{}{:.2}%", sign, percentage),
             "alt": class,
             "class": class,
-            "tooltip": format!("Portfolio Avg: {:.2}%", percentage)
+            "tooltip": format!("Daily average: {:.2}%", percentage)
         })
         .to_string()
     }
