@@ -20,26 +20,26 @@ use std::rc::Rc;
 
 pub struct StockManager {
     api: Rc<StockApi>,
-    model: ListStore,
+    stocks: ListStore,
 }
 
 impl StockManager {
     pub fn new(tickers: &[(String, String)]) -> Self {
         let api = Rc::new(StockApi::new());
-        let model = ListStore::new::<StockObject>();
+        let stocks = ListStore::new::<StockObject>();
 
         for (ticker, name) in tickers {
-            model.append(&StockObject::new(ticker, name));
+            stocks.append(&StockObject::new(ticker, name));
         }
 
-        let manager = Self { api, model };
+        let manager = Self { api, stocks };
         manager.update_stocks();
         manager
     }
 
     pub fn update_stocks(&self) {
-        for i in 0..self.model.n_items() {
-            if let Some(item) = self.model.item(i) {
+        for i in 0..self.stocks.n_items() {
+            if let Some(item) = self.stocks.item(i) {
                 let stock = item.downcast::<StockObject>().unwrap();
                 let ticker = stock.ticker();
 
@@ -74,7 +74,7 @@ impl StockManager {
     }
 
     pub fn create_stock_list(&self) -> ScrolledWindow {
-        let selection_model = SingleSelection::new(Some(self.model.clone()));
+        let selection_model = SingleSelection::new(Some(self.stocks.clone()));
         let column_view = ColumnView::new(Some(selection_model));
         column_view.set_reorderable(false);
 
@@ -84,7 +84,7 @@ impl StockManager {
 
         remove_stock_action.connect_activate(glib::clone!(
             #[weak(rename_to = model)]
-            self.model,
+            self.stocks,
             #[weak]
             column_view,
             move |_, _| {
@@ -353,7 +353,7 @@ impl StockManager {
         // --- SELECTION LOGIC ---
         results_list.connect_row_activated(glib::clone!(
             #[weak(rename_to = model)]
-            self.model,
+            self.stocks,
             #[weak]
             results_popover,
             #[weak]
