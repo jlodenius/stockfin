@@ -1,4 +1,4 @@
-# Waybar Configuration for Stockfin
+# Waybar Configuration
 Add the following snippets to your Waybar configuration to integrate the Stockfin D-Bus service.
 
 ## 1. Module Definition
