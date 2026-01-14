@@ -2,7 +2,7 @@ use directories::ProjectDirs;
 use std::{fs, path::PathBuf};
 
 pub fn get_config_path() -> PathBuf {
-    let proj_dirs = ProjectDirs::from("com", "yourname", "stockfin")
+    let proj_dirs = ProjectDirs::from("org", "jlodenius", "stockfin")
         .expect("Could not determine config directory");
 
     let config_dir = proj_dirs.config_dir();
