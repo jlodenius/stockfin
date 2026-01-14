@@ -57,9 +57,9 @@ impl StockfinBus {
     fn status_json(&self) -> String {
         let val = self.state.avg_change.load(Ordering::Acquire);
         let percentage = val * 100.0;
-        let class = if percentage >= 10.0 {
+        let class = if percentage >= 5.0 {
             "bullish"
-        } else if percentage < -10.0 {
+        } else if percentage < -5.0 {
             "bearish"
         } else {
             "neutral"
