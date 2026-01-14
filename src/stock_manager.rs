@@ -1,4 +1,5 @@
 use crate::{
+    dbus::StockfinBusState,
     persistence::save_tickers,
     stock_api::{RangeResponse, StockApi},
     stock_object::StockObject,
@@ -17,20 +18,17 @@ use gtk::{
     pango::EllipsizeMode,
     prelude::*,
 };
-use std::{
-    cmp::Ordering,
-    rc::Rc,
-    sync::{Arc, Mutex},
-};
+use std::{cmp::Ordering, rc::Rc, sync::Arc};
 
 pub struct StockManager {
     api: Rc<StockApi>,
     stocks: ListStore,
     sorted_stocks: SortListModel,
+    bus_state: Arc<StockfinBusState>,
 }
 
 impl StockManager {
-    pub fn new(tickers: &[(String, String)], avg_state: Arc<Mutex<f64>>) -> Self {
+    pub fn new(tickers: &[(String, String)], bus_state: Arc<StockfinBusState>) -> Self {
         let sorter = CustomSorter::new(move |a, b| {
             let stock1 = a.downcast_ref::<StockObject>().unwrap();
             let stock2 = b.downcast_ref::<StockObject>().unwrap();
@@ -54,6 +52,7 @@ impl StockManager {
             api,
             stocks,
             sorted_stocks,
+            bus_state,
         };
 
         manager.update_stocks();
@@ -70,6 +69,7 @@ impl StockManager {
                 glib::MainContext::default().spawn_local({
                     let stock = stock.clone();
                     let api = self.api.clone();
+                    let bus_state = self.bus_state.clone();
 
                     async move {
                         if let Ok(RangeResponse {
@@ -90,6 +90,7 @@ impl StockManager {
                         {
                             stock.set_pct_change_1d(pct_change);
                             stock.set_price(last_close);
+                            *bus_state.avg_change.lock().unwrap() = pct_change;
                         }
 
                         // Makes sure that the UI updates

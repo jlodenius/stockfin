@@ -1,6 +1,8 @@
 use gtk::{
+    Application,
     gio::{self, prelude::ApplicationExt},
-    glib::{self},
+    glib::{self, object::Cast},
+    prelude::*,
 };
 use serde_json::json;
 use std::sync::{Arc, Mutex};
@@ -15,23 +17,42 @@ trait Stockfin {
     fn activate(&self) -> zbus::Result<()>;
 }
 
-pub struct StockfinBus {
+pub struct StockfinBusState {
     pub avg_change: Arc<Mutex<f64>>,
+}
+
+impl StockfinBusState {
+    fn new() -> Self {
+        Self {
+            avg_change: Arc::new(Mutex::new(0.0)),
+        }
+    }
+}
+
+pub struct StockfinBus {
+    state: Arc<StockfinBusState>,
 }
 
 #[interface(name = "org.jlodenius.stockfin")]
 impl StockfinBus {
     fn activate(&self) {
-        glib::MainContext::default().invoke_local(|| {
-            if let Some(app) = gio::Application::default() {
-                app.activate();
+        // .invoke() safely moves the closure to the MAIN thread
+        glib::MainContext::default().invoke(move || {
+            let app =
+                gio::Application::default().and_then(|app| app.downcast::<Application>().ok());
+
+            if let Some(app) = app {
+                match app.active_window() {
+                    Some(window) => window.present(),
+                    None => app.activate(),
+                }
             }
         });
     }
 
     #[zbus(property)]
     fn status_json(&self) -> String {
-        let val = *self.avg_change.lock().unwrap();
+        let val = *self.state.avg_change.lock().unwrap();
         let percentage = val * 100.0;
         let class = if percentage > 0.0 {
             "bullish"
@@ -43,7 +64,7 @@ impl StockfinBus {
         let sign = if percentage >= 0.0 { "+" } else { "" };
 
         json!({
-            "text": format!("Stockfin: {}{:.2}%", sign, percentage),
+            "text": format!("{}{:.2}%", sign, percentage),
             "alt": class,
             "class": class,
             "tooltip": format!("Portfolio Avg: {:.2}%", percentage)
@@ -53,21 +74,29 @@ impl StockfinBus {
 }
 
 impl StockfinBus {
-    pub fn spawn(avg_change: Arc<Mutex<f64>>) {
-        let bus_interface = Self { avg_change };
+    pub fn spawn() -> Arc<StockfinBusState> {
+        let state = Arc::new(StockfinBusState::new());
+        let bus = Self {
+            state: state.clone(),
+        };
 
         glib::MainContext::default().spawn_local(async move {
             let connection = Connection::session().await.expect("Failed to connect");
 
-            // Only register the interface if we successfully get the name
-            if (connection.request_name("org.jlodenius.stockfin").await).is_ok() {
-                connection
-                    .object_server()
-                    .at("/org/jlodenius/stockfin", bus_interface)
-                    .await
-                    .expect("Failed to serve object");
-                std::future::pending::<()>().await;
-            }
+            connection
+                .request_name("org.jlodenius.stockfin.Waybar")
+                .await
+                .expect("Failed to request name");
+
+            connection
+                .object_server()
+                .at("/org/jlodenius/stockfin", bus)
+                .await
+                .expect("Failed to serve object");
+
+            std::future::pending::<()>().await;
         });
+
+        state
     }
 }

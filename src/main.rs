@@ -13,17 +13,14 @@ use gtk::{
     prelude::*,
     style_context_add_provider_for_display,
 };
-use std::{
-    rc::Rc,
-    sync::{Arc, Mutex, mpsc},
-    time::Duration,
-};
+use std::{rc::Rc, time::Duration};
 
 #[tokio::main]
 async fn main() {
     let application = Application::builder()
         .application_id("org.jlodenius.stockfin")
         .build();
+
     application.connect_startup(on_startup);
     application.connect_activate(on_activate);
     application.run();
@@ -47,12 +44,8 @@ fn on_activate(application: &Application) {
     }
 
     let tickers = load_tickers();
-
-    // DBUS
-    let avg_state = Arc::new(Mutex::new(0.0));
-    StockfinBus::spawn(avg_state.clone());
-
-    let stock_manager = Rc::new(StockManager::new(&tickers, avg_state.clone()));
+    let bus_state = StockfinBus::spawn();
+    let stock_manager = Rc::new(StockManager::new(&tickers, bus_state));
 
     let main_layout = Box::builder()
         .orientation(Orientation::Vertical)
@@ -73,10 +66,9 @@ fn on_activate(application: &Application) {
         .show_menubar(true)
         .build();
 
-    // Instead of closing, just hide the window
     window.connect_close_request(move |w| {
         w.hide();
-        Propagation::Stop // This prevents the window from being destroyed
+        Propagation::Stop // Prevent window from being destroyed
     });
     window.present();
 
