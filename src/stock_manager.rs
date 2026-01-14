@@ -72,25 +72,31 @@ impl StockManager {
             .collect();
 
         glib::MainContext::default().spawn_local(async move {
-            let mut futures = Vec::new();
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap();
 
-            for stock in stocks_vec {
-                let api = api.clone();
-                let ticker = stock.ticker();
+            let updated_stocks: Vec<_> = stocks_vec
+                .iter()
+                .map(|stock| {
+                    let api = api.clone();
+                    let ticker = stock.ticker();
 
-                futures.push(async move {
-                    if let Ok(res) = api.weekly_range(&ticker).await {
-                        stock.set_pct_change_1w(res.pct_change);
-                    }
-                    if let Ok(res) = api.daily_range(&ticker).await {
-                        stock.set_pct_change_1d(res.pct_change);
-                        stock.set_price(res.last_close);
-                    }
-                    stock
-                });
-            }
-
-            let updated_stocks = futures::future::join_all(futures).await;
+                    // Since the API uses tokio we need to spawn these in a dedicated tokio
+                    // runtime, this is to not clash with the GTK async runtime
+                    rt.block_on(async move {
+                        if let Ok(res) = api.weekly_range(&ticker).await {
+                            stock.set_pct_change_1w(res.pct_change);
+                        }
+                        if let Ok(res) = api.daily_range(&ticker).await {
+                            stock.set_pct_change_1d(res.pct_change);
+                            stock.set_price(res.last_close);
+                        }
+                        stock
+                    })
+                })
+                .collect();
 
             if let Some(sorter) = sorted_stocks.sorter() {
                 sorter.changed(SorterChange::Different);
@@ -363,7 +369,15 @@ impl StockManager {
                     #[weak]
                     results_list,
                     async move {
-                        let results = api.search_ticker(&text).await;
+                        // TODO:
+                        // Create a wrapper inside api that handles the tokio runtime so we don't
+                        // have to construct a new rt every time we use the api
+                        let rt = tokio::runtime::Builder::new_current_thread()
+                            .enable_all()
+                            .build()
+                            .unwrap();
+
+                        let results = rt.block_on(async move { api.search_ticker(&text).await });
 
                         // Clear old results
                         while let Some(child) = results_list.first_child() {
