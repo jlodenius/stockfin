@@ -4,7 +4,7 @@
 - [] Waybar widget
 - [] Display total profit
 - [] Include/Exclude stock from total
-- [] Sort list
+- [x] Sort list
 
 # Features
 - [] Weighted stocks/portfolio

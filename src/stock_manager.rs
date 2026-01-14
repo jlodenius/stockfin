@@ -17,7 +17,11 @@ use gtk::{
     pango::EllipsizeMode,
     prelude::*,
 };
-use std::{cmp::Ordering, rc::Rc};
+use std::{
+    cmp::Ordering,
+    rc::Rc,
+    sync::{Arc, Mutex},
+};
 
 pub struct StockManager {
     api: Rc<StockApi>,
@@ -26,7 +30,7 @@ pub struct StockManager {
 }
 
 impl StockManager {
-    pub fn new(tickers: &[(String, String)]) -> Self {
+    pub fn new(tickers: &[(String, String)], avg_state: Arc<Mutex<f64>>) -> Self {
         let sorter = CustomSorter::new(move |a, b| {
             let stock1 = a.downcast_ref::<StockObject>().unwrap();
             let stock2 = b.downcast_ref::<StockObject>().unwrap();

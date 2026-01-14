@@ -1,25 +1,29 @@
+pub mod dbus;
 pub mod persistence;
 pub mod stock_api;
 pub mod stock_manager;
 pub mod stock_object;
 
-use crate::{persistence::load_tickers, stock_manager::StockManager};
+use crate::{dbus::StockfinBus, persistence::load_tickers, stock_manager::StockManager};
 use gtk::{
     Application, ApplicationWindow, Box, CssProvider, Orientation,
     STYLE_PROVIDER_PRIORITY_APPLICATION,
     gdk::Display,
-    glib::{ControlFlow, timeout_add_local},
+    glib::{ControlFlow, Propagation, timeout_add_local},
     prelude::*,
     style_context_add_provider_for_display,
 };
-use std::{rc::Rc, time::Duration};
+use std::{
+    rc::Rc,
+    sync::{Arc, Mutex, mpsc},
+    time::Duration,
+};
 
 #[tokio::main]
 async fn main() {
     let application = Application::builder()
-        .application_id("org.stockfin")
+        .application_id("org.jlodenius.stockfin")
         .build();
-
     application.connect_startup(on_startup);
     application.connect_activate(on_activate);
     application.run();
@@ -37,8 +41,18 @@ fn on_startup(_app: &Application) {
 }
 
 fn on_activate(application: &Application) {
+    // If app already running, focus it instead of starting a new instance
+    if let Some(window) = application.active_window() {
+        return window.present();
+    }
+
     let tickers = load_tickers();
-    let stock_manager = Rc::new(StockManager::new(&tickers));
+
+    // DBUS
+    let avg_state = Arc::new(Mutex::new(0.0));
+    StockfinBus::spawn(avg_state.clone());
+
+    let stock_manager = Rc::new(StockManager::new(&tickers, avg_state.clone()));
 
     let main_layout = Box::builder()
         .orientation(Orientation::Vertical)
@@ -59,6 +73,11 @@ fn on_activate(application: &Application) {
         .show_menubar(true)
         .build();
 
+    // Instead of closing, just hide the window
+    window.connect_close_request(move |w| {
+        w.hide();
+        Propagation::Stop // This prevents the window from being destroyed
+    });
     window.present();
 
     // Update prices once every 10 seconds
