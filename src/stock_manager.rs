@@ -167,7 +167,7 @@ impl StockManager {
 
             stock
                 .bind_property("price", &label, "label")
-                .transform_to(|_, value: f64| Some(format!("${:.2}", value)))
+                .transform_to(|_, value: f64| Some(format!("{:.2}", value)))
                 .sync_create()
                 .build();
         });
@@ -272,7 +272,11 @@ impl StockManager {
 
                         for (symbol, name) in results {
                             let label = Label::builder()
-                                .label(format!("<b>{}</b> - {}", symbol, name))
+                                .label(format!(
+                                    "<b>{}</b> - {}",
+                                    glib::markup_escape_text(&symbol),
+                                    glib::markup_escape_text(&name)
+                                ))
                                 .use_markup(true)
                                 .xalign(0.0)
                                 .build();
