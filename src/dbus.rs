@@ -1,3 +1,4 @@
+use atomic_float::AtomicF64;
 use gtk::{
     Application,
     gio::{self, prelude::ApplicationExt},
@@ -5,8 +6,10 @@ use gtk::{
     prelude::*,
 };
 use serde_json::json;
-use std::sync::{Arc, Mutex};
-use zbus::{connection::Connection, interface, proxy};
+use std::sync::Arc;
+use std::sync::atomic::Ordering;
+use std::thread;
+use zbus::{blocking::Connection, interface, proxy};
 
 #[proxy(
     interface = "org.jlodenius.stockfin",
@@ -18,13 +21,13 @@ trait Stockfin {
 }
 
 pub struct StockfinBusState {
-    pub avg_change: Arc<Mutex<f64>>,
+    pub avg_change: Arc<AtomicF64>,
 }
 
 impl StockfinBusState {
     fn new() -> Self {
         Self {
-            avg_change: Arc::new(Mutex::new(0.0)),
+            avg_change: Arc::new(AtomicF64::new(0.0)),
         }
     }
 }
@@ -52,11 +55,11 @@ impl StockfinBus {
 
     #[zbus(property)]
     fn status_json(&self) -> String {
-        let val = *self.state.avg_change.lock().unwrap();
+        let val = self.state.avg_change.load(Ordering::Acquire);
         let percentage = val * 100.0;
-        let class = if percentage > 0.0 {
+        let class = if percentage >= 10.0 {
             "bullish"
-        } else if percentage < 0.0 {
+        } else if percentage < -10.0 {
             "bearish"
         } else {
             "neutral"
@@ -80,21 +83,22 @@ impl StockfinBus {
             state: state.clone(),
         };
 
-        glib::MainContext::default().spawn_local(async move {
-            let connection = Connection::session().await.expect("Failed to connect");
+        thread::spawn(move || {
+            let connection = Connection::session().expect("Failed to connect");
 
             connection
                 .request_name("org.jlodenius.stockfin.Waybar")
-                .await
                 .expect("Failed to request name");
 
             connection
                 .object_server()
                 .at("/org/jlodenius/stockfin", bus)
-                .await
                 .expect("Failed to serve object");
 
-            std::future::pending::<()>().await;
+            // This thread now just sits and waits for DBus requests
+            loop {
+                thread::park();
+            }
         });
 
         state

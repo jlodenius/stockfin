@@ -1,7 +1,5 @@
 use crate::{
-    dbus::StockfinBusState,
-    persistence::save_tickers,
-    stock_api::{RangeResponse, StockApi},
+    dbus::StockfinBusState, persistence::save_tickers, stock_api::StockApi,
     stock_object::StockObject,
 };
 use gtk::{
@@ -18,7 +16,11 @@ use gtk::{
     pango::EllipsizeMode,
     prelude::*,
 };
-use std::{cmp::Ordering, rc::Rc, sync::Arc};
+use std::{
+    cmp::Ordering,
+    rc::Rc,
+    sync::{Arc, atomic},
+};
 
 pub struct StockManager {
     api: Rc<StockApi>,
@@ -60,47 +62,49 @@ impl StockManager {
     }
 
     pub fn update_stocks(&self) {
-        for i in 0..self.stocks.n_items() {
-            if let Some(item) = self.stocks.item(i) {
-                let stock = item.downcast::<StockObject>().unwrap();
-                let sorted_stocks = self.sorted_stocks.clone();
+        let api = self.api.clone();
+        let bus_state = self.bus_state.clone();
+        let sorted_stocks = self.sorted_stocks.clone();
+
+        let stocks_vec: Vec<StockObject> = (0..self.stocks.n_items())
+            .filter_map(|i| self.stocks.item(i))
+            .filter_map(|item| item.downcast::<StockObject>().ok())
+            .collect();
+
+        glib::MainContext::default().spawn_local(async move {
+            let mut futures = Vec::new();
+
+            for stock in stocks_vec {
+                let api = api.clone();
                 let ticker = stock.ticker();
 
-                glib::MainContext::default().spawn_local({
-                    let stock = stock.clone();
-                    let api = self.api.clone();
-                    let bus_state = self.bus_state.clone();
-
-                    async move {
-                        if let Ok(RangeResponse {
-                            last_close,
-                            pct_change,
-                            ..
-                        }) = api.weekly_range(&ticker).await
-                        {
-                            stock.set_pct_change_1w(pct_change);
-                            stock.set_price(last_close);
-                        }
-
-                        if let Ok(RangeResponse {
-                            pct_change,
-                            last_close,
-                            ..
-                        }) = api.daily_range(&ticker).await
-                        {
-                            stock.set_pct_change_1d(pct_change);
-                            stock.set_price(last_close);
-                            *bus_state.avg_change.lock().unwrap() = pct_change;
-                        }
-
-                        // Makes sure that the UI updates
-                        if let Some(sorter) = sorted_stocks.sorter() {
-                            sorter.changed(SorterChange::Different);
-                        }
+                futures.push(async move {
+                    if let Ok(res) = api.weekly_range(&ticker).await {
+                        stock.set_pct_change_1w(res.pct_change);
                     }
+                    if let Ok(res) = api.daily_range(&ticker).await {
+                        stock.set_pct_change_1d(res.pct_change);
+                        stock.set_price(res.last_close);
+                    }
+                    stock
                 });
             }
-        }
+
+            let updated_stocks = futures::future::join_all(futures).await;
+
+            if let Some(sorter) = sorted_stocks.sorter() {
+                sorter.changed(SorterChange::Different);
+            }
+
+            if !updated_stocks.is_empty() {
+                let total: f64 = updated_stocks.iter().map(|s| s.pct_change_1d()).sum();
+                let average = total / updated_stocks.len() as f64;
+
+                bus_state
+                    .avg_change
+                    .store(average, atomic::Ordering::Release);
+            }
+        });
     }
 
     pub fn create_stock_list(&self) -> ScrolledWindow {
