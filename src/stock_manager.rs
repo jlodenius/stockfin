@@ -4,9 +4,10 @@ use crate::{
     stock_object::StockObject,
 };
 use gtk::{
-    Align, Box, ColumnView, ColumnViewColumn, GestureClick, INVALID_LIST_POSITION, Label, ListBox,
-    ListBoxRow, Orientation, Popover, PopoverMenu, PopoverMenuFlags, PositionType, ScrolledWindow,
-    SearchEntry, SignalListItemFactory, SingleSelection,
+    Align, Box, ColumnView, ColumnViewColumn, CustomSorter, GestureClick, INVALID_LIST_POSITION,
+    Label, ListBox, ListBoxRow, Orientation, Popover, PopoverMenu, PopoverMenuFlags, PositionType,
+    ScrolledWindow, SearchEntry, SignalListItemFactory, SingleSelection, SortListModel,
+    SorterChange,
     gdk::Rectangle,
     gio::{ListStore, Menu, SimpleAction, SimpleActionGroup, prelude::*},
     glib::{
@@ -16,23 +17,41 @@ use gtk::{
     pango::EllipsizeMode,
     prelude::*,
 };
-use std::rc::Rc;
+use std::{cmp::Ordering, rc::Rc};
 
 pub struct StockManager {
     api: Rc<StockApi>,
     stocks: ListStore,
+    sorted_stocks: SortListModel,
 }
 
 impl StockManager {
     pub fn new(tickers: &[(String, String)]) -> Self {
+        let sorter = CustomSorter::new(move |a, b| {
+            let stock1 = a.downcast_ref::<StockObject>().unwrap();
+            let stock2 = b.downcast_ref::<StockObject>().unwrap();
+
+            stock2
+                .pct_change_1d()
+                .partial_cmp(&stock1.pct_change_1d())
+                .unwrap_or(Ordering::Equal)
+                .into()
+        });
+
         let api = Rc::new(StockApi::new());
         let stocks = ListStore::new::<StockObject>();
+        let sorted_stocks = SortListModel::new(Some(stocks.clone()), Some(sorter));
 
         for (ticker, name) in tickers {
             stocks.append(&StockObject::new(ticker, name));
         }
 
-        let manager = Self { api, stocks };
+        let manager = Self {
+            api,
+            stocks,
+            sorted_stocks,
+        };
+
         manager.update_stocks();
         manager
     }
@@ -41,6 +60,7 @@ impl StockManager {
         for i in 0..self.stocks.n_items() {
             if let Some(item) = self.stocks.item(i) {
                 let stock = item.downcast::<StockObject>().unwrap();
+                let sorted_stocks = self.sorted_stocks.clone();
                 let ticker = stock.ticker();
 
                 glib::MainContext::default().spawn_local({
@@ -67,6 +87,11 @@ impl StockManager {
                             stock.set_pct_change_1d(pct_change);
                             stock.set_price(last_close);
                         }
+
+                        // Makes sure that the UI updates
+                        if let Some(sorter) = sorted_stocks.sorter() {
+                            sorter.changed(SorterChange::Different);
+                        }
                     }
                 });
             }
@@ -74,7 +99,7 @@ impl StockManager {
     }
 
     pub fn create_stock_list(&self) -> ScrolledWindow {
-        let selection_model = SingleSelection::new(Some(self.stocks.clone()));
+        let selection_model = SingleSelection::new(Some(self.sorted_stocks.clone()));
         let column_view = ColumnView::new(Some(selection_model));
         column_view.set_reorderable(false);
 
@@ -83,8 +108,10 @@ impl StockManager {
         let remove_stock_action = SimpleAction::new("remove", None);
 
         remove_stock_action.connect_activate(glib::clone!(
-            #[weak(rename_to = model)]
+            #[weak(rename_to = stocks)]
             self.stocks,
+            #[weak(rename_to = sorted_stocks)]
+            self.sorted_stocks,
             #[weak]
             column_view,
             move |_, _| {
@@ -92,20 +119,35 @@ impl StockManager {
                     .model()
                     .and_downcast::<SingleSelection>()
                     .unwrap();
-                let pos = selection.selected();
-                if pos != INVALID_LIST_POSITION {
-                    model.remove(pos);
+                let view_pos = selection.selected();
 
-                    // Persist changes
-                    let tickers: Vec<(String, String)> = (0..model.n_items())
-                        .filter_map(|i| model.item(i))
-                        .map(|obj| {
-                            let stock = obj.downcast::<StockObject>().unwrap();
-                            (stock.ticker(), stock.name())
-                        })
-                        .collect();
+                if view_pos != INVALID_LIST_POSITION {
+                    // Find the item in the sorted view
+                    if let Some(item) = sorted_stocks.item(view_pos) {
+                        // Find where this specific object lives in the underlying store
+                        let mut source_pos = None;
+                        for i in 0..stocks.n_items() {
+                            if stocks.item(i).as_ref() == Some(&item) {
+                                source_pos = Some(i);
+                                break;
+                            }
+                        }
 
-                    save_tickers(tickers);
+                        // Remove it from the store
+                        if let Some(pos) = source_pos {
+                            stocks.remove(pos);
+
+                            let tickers: Vec<(String, String)> = (0..stocks.n_items())
+                                .filter_map(|i| stocks.item(i))
+                                .map(|obj| {
+                                    let stock = obj.downcast::<StockObject>().unwrap();
+                                    (stock.ticker(), stock.name())
+                                })
+                                .collect();
+
+                            save_tickers(tickers);
+                        }
+                    }
                 }
             }
         ));
