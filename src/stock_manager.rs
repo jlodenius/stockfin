@@ -1,6 +1,6 @@
 use crate::{
     persistence::save_tickers,
-    stock_api::{StockApi, WeeklyRangeResponse},
+    stock_api::{RangeResponse, StockApi},
     stock_object::StockObject,
 };
 use gtk::{
@@ -24,12 +24,12 @@ pub struct StockManager {
 }
 
 impl StockManager {
-    pub fn new(tickers: &[String]) -> Self {
+    pub fn new(tickers: &[(String, String)]) -> Self {
         let api = Rc::new(StockApi::new());
         let model = ListStore::new::<StockObject>();
 
-        for ticker in tickers {
-            model.append(&StockObject::new(ticker));
+        for (ticker, name) in tickers {
+            model.append(&StockObject::new(ticker, name));
         }
 
         let manager = Self { api, model };
@@ -48,14 +48,23 @@ impl StockManager {
                     let api = self.api.clone();
 
                     async move {
-                        if let Ok(WeeklyRangeResponse {
-                            stock_name,
-                            prev_close,
+                        if let Ok(RangeResponse {
                             last_close,
+                            pct_change,
+                            ..
                         }) = api.weekly_range(&ticker).await
                         {
-                            stock.set_name(stock_name);
-                            stock.set_pct_change_1w((last_close - prev_close) / prev_close);
+                            stock.set_pct_change_1w(pct_change);
+                            stock.set_price(last_close);
+                        }
+
+                        if let Ok(RangeResponse {
+                            pct_change,
+                            last_close,
+                            ..
+                        }) = api.daily_range(&ticker).await
+                        {
+                            stock.set_pct_change_1d(pct_change);
                             stock.set_price(last_close);
                         }
                     }
@@ -88,10 +97,14 @@ impl StockManager {
                     model.remove(pos);
 
                     // Persist changes
-                    let tickers: Vec<String> = (0..model.n_items())
+                    let tickers: Vec<(String, String)> = (0..model.n_items())
                         .filter_map(|i| model.item(i))
-                        .map(|obj| obj.downcast::<StockObject>().unwrap().ticker())
+                        .map(|obj| {
+                            let stock = obj.downcast::<StockObject>().unwrap();
+                            (stock.ticker(), stock.name())
+                        })
                         .collect();
+
                     save_tickers(tickers);
                 }
             }
@@ -175,13 +188,13 @@ impl StockManager {
         column_view.append_column(&col_price);
 
         // --- Column 4: 1W Change ---
-        let factory_change = SignalListItemFactory::new();
-        factory_change.connect_setup(|_, list_item| {
+        let factory_change_1w = SignalListItemFactory::new();
+        factory_change_1w.connect_setup(|_, list_item| {
             let label = Label::new(None);
             label.set_halign(Align::End);
             list_item.set_child(Some(&label));
         });
-        factory_change.connect_bind(|_, list_item| {
+        factory_change_1w.connect_bind(|_, list_item| {
             let stock = list_item.item().and_downcast::<StockObject>().unwrap();
             let label = list_item.child().and_downcast::<Label>().unwrap();
 
@@ -212,8 +225,49 @@ impl StockManager {
                 ),
             );
         });
-        let col_change = ColumnViewColumn::new(Some("Change (1w)"), Some(factory_change));
-        column_view.append_column(&col_change);
+        let col_change_1w = ColumnViewColumn::new(Some("Change (1w)"), Some(factory_change_1w));
+        column_view.append_column(&col_change_1w);
+
+        // --- Column 4: 1d Change ---
+        let factory_change_1d = SignalListItemFactory::new();
+        factory_change_1d.connect_setup(|_, list_item| {
+            let label = Label::new(None);
+            label.set_halign(Align::End);
+            list_item.set_child(Some(&label));
+        });
+        factory_change_1d.connect_bind(|_, list_item| {
+            let stock = list_item.item().and_downcast::<StockObject>().unwrap();
+            let label = list_item.child().and_downcast::<Label>().unwrap();
+
+            stock
+                .bind_property("pct-change-1d", &label, "label")
+                .transform_to(|_, val: f64| {
+                    let sign = if val >= 0.0 { "+" } else { "" };
+                    Some(format!("{}{:.2}%", sign, val * 100.0))
+                })
+                .sync_create()
+                .build();
+
+            stock.connect_notify_local(
+                Some("pct-change-1d"),
+                glib::clone!(
+                    #[weak]
+                    label,
+                    move |s, _| {
+                        let pct_change = s.property::<f64>("pct-change-1d");
+                        if pct_change >= 0.0 {
+                            label.add_css_class("success");
+                            label.remove_css_class("error");
+                        } else {
+                            label.add_css_class("error");
+                            label.remove_css_class("success");
+                        }
+                    }
+                ),
+            );
+        });
+        let col_change_1d = ColumnViewColumn::new(Some("Change (1d)"), Some(factory_change_1d));
+        column_view.append_column(&col_change_1d);
 
         ScrolledWindow::builder().child(&column_view).build()
     }
@@ -271,12 +325,11 @@ impl StockManager {
                         }
 
                         for (symbol, name) in results {
+                            let symbol = glib::markup_escape_text(&symbol);
+                            let name = glib::markup_escape_text(&name);
+
                             let label = Label::builder()
-                                .label(format!(
-                                    "<b>{}</b> - {}",
-                                    glib::markup_escape_text(&symbol),
-                                    glib::markup_escape_text(&name)
-                                ))
+                                .label(format!("<b>{}</b> - {}", symbol, name))
                                 .use_markup(true)
                                 .xalign(0.0)
                                 .build();
@@ -285,7 +338,8 @@ impl StockManager {
                             row.set_child(Some(&label));
 
                             unsafe {
-                                row.set_data("ticker_symbol", symbol);
+                                row.set_data("ticker_symbol", symbol.to_string());
+                                row.set_data("stock_name", name.to_string());
                             }
 
                             results_list.append(&row);
@@ -305,18 +359,28 @@ impl StockManager {
             #[weak]
             search_entry,
             move |_, row| {
+                // SAFETY:
+                // We set these exact two values above
                 let symbol: String = unsafe {
                     row.data::<String>("ticker_symbol")
                         .map(|s| s.as_ref().clone())
                         .unwrap_or_default()
                 };
+                let stock_name: String = unsafe {
+                    row.data::<String>("stock_name")
+                        .map(|s| s.as_ref().clone())
+                        .unwrap_or_default()
+                };
 
                 if !symbol.is_empty() {
-                    model.append(&StockObject::new(&symbol));
+                    model.append(&StockObject::new(&symbol, &stock_name));
 
-                    let tickers: Vec<String> = (0..model.n_items())
+                    let tickers: Vec<(String, String)> = (0..model.n_items())
                         .filter_map(|i| model.item(i))
-                        .map(|obj| obj.downcast::<StockObject>().unwrap().ticker())
+                        .map(|obj| {
+                            let stock = obj.downcast::<StockObject>().unwrap();
+                            (stock.ticker(), stock.name())
+                        })
                         .collect();
 
                     save_tickers(tickers);

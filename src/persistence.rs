@@ -1,7 +1,7 @@
 use directories::ProjectDirs;
-use std::fs;
+use std::{fs, path::PathBuf};
 
-pub fn get_config_path() -> std::path::PathBuf {
+pub fn get_config_path() -> PathBuf {
     let proj_dirs = ProjectDirs::from("com", "yourname", "stockfin")
         .expect("Could not determine config directory");
 
@@ -10,18 +10,18 @@ pub fn get_config_path() -> std::path::PathBuf {
     config_dir.join("tickers.json")
 }
 
-pub fn save_tickers(tickers: Vec<String>) {
+pub fn save_tickers(tickers: Vec<(String, String)>) {
     let path = get_config_path();
     if let Ok(json) = serde_json::to_string(&tickers) {
         fs::write(path, json).ok();
     }
 }
 
-pub fn load_tickers() -> Vec<String> {
+pub fn load_tickers() -> Vec<(String, String)> {
     let path = get_config_path();
 
     fs::read_to_string(path)
         .ok()
-        .and_then(|data| serde_json::from_str::<Vec<String>>(&data).ok())
+        .and_then(|data| serde_json::from_str::<Vec<(String, String)>>(&data).ok())
         .unwrap_or_default()
 }

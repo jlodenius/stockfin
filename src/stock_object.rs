@@ -16,6 +16,8 @@ mod imp {
         pub price: RefCell<f64>,
         #[property(get, set)]
         pub pct_change_1w: RefCell<f64>,
+        #[property(get, set)]
+        pub pct_change_1d: RefCell<f64>,
     }
 
     #[glib::object_subclass]
@@ -33,12 +35,13 @@ glib::wrapper! {
 }
 
 impl StockObject {
-    pub fn new(ticker: &str) -> Self {
+    pub fn new(ticker: &str, name: &str) -> Self {
         glib::Object::builder()
             .property("ticker", ticker)
-            .property("name", "N/A")
+            .property("name", name)
             .property("price", 0.0)
             .property("pct_change_1w", 0.0)
+            .property("pct_change_1d", 0.0)
             .build()
     }
 }
