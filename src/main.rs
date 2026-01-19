@@ -71,9 +71,9 @@ fn on_activate(application: &Application) {
     });
     window.present();
 
-    // Update prices once every 10 seconds
+    // Update prices once every 60 seconds
     let manager_clone = stock_manager.clone();
-    timeout_add_local(Duration::from_secs(10), move || {
+    timeout_add_local(Duration::from_secs(60), move || {
         manager_clone.update_stocks();
 
         // Continue = keep timer running
