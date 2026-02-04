@@ -6,7 +6,26 @@ A GTK app for tracking stocks and crypto using the Yahoo Finance open API. No cr
 
 ## Installation
 
-Packaging is a work in progress. In the meantime, feel free to build from source or use the Nix flake.
+### Cargo
+
+```bash
+cargo install stockfin
+```
+
+### Nix Flake
+
+```bash
+nix run github:jlodenius/stockfin
+```
+
+### System Dependencies
+
+Requires the following system libraries:
+
+- gtk4
+- glib
+- dbus
+- pkg-config (build only)
 
 ## Waybar Integration
 

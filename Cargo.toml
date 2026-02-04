@@ -2,6 +2,11 @@
 name = "stockfin"
 version = "0.1.0"
 edition = "2024"
+description = "A GTK app for tracking stocks and crypto using the Yahoo Finance API"
+license = "MIT"
+repository = "https://github.com/jlodenius/stockfin"
+keywords = ["gtk", "stocks", "crypto", "finance", "waybar"]
+categories = ["gui"]
 
 [dependencies]
 yahoo_finance_api = "4.1.0"
