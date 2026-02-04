@@ -27,7 +27,7 @@ fn main() {
 
 fn on_startup(_app: &Application) {
     let css_provider = CssProvider::new();
-    css_provider.load_from_path("resources/style.css");
+    css_provider.load_from_data(include_str!("../resources/style.css"));
 
     style_context_add_provider_for_display(
         &Display::default().expect("Could not connect to a display."),
