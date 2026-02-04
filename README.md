@@ -4,6 +4,10 @@ A GTK app for tracking stocks and crypto using the Yahoo Finance open API. No cr
 
 ![Stockfin App](assets/app.png)
 
+## Installation
+
+Packaging is a work in progress. In the meantime, feel free to build from source or use the Nix flake.
+
 ## Waybar Integration
 
 ![Waybar Module](assets/waybar.png)
