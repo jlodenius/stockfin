@@ -1,4 +1,13 @@
-# Waybar Configuration
+# Stockfin
+
+A GTK app for tracking stocks and crypto using the Yahoo Finance open API. No credentials required.
+
+![Stockfin App](assets/app.png)
+
+## Waybar Integration
+
+![Waybar Module](assets/waybar.png)
+
 Add the following snippets to your Waybar configuration to integrate the Stockfin D-Bus service.
 
 ## 1. Module Definition
